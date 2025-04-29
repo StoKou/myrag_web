@@ -1,0 +1,39 @@
+# Flask 相关依赖
+Flask>=2.0.0
+werkzeug>=2.0.0
+Flask-Cors>=3.0.0
+
+# 文件处理依赖
+unstructured>=0.10.0
+unstructured[pdf]>=0.10.0
+unstructured[docx]>=0.10.0
+unstructured[pptx]>=0.10.0
+unstructured[xlsx]>=0.10.0
+unstructured[md]>=0.10.0
+pdfminer.six==20221105
+
+# LlamaIndex 相关依赖
+llama-index>=0.9.0
+llama-index-core>=0.10.0
+llama-index-llms-openai>=0.1.0
+llama-index-embeddings-openai>=0.1.0
+
+# LangChain 相关依赖
+langchain>=0.0.300
+
+# OpenAI API 相关依赖
+openai>=1.0.0
+
+# 环境变量配置
+python-dotenv>=0.20.0
+
+# 文件类型检测
+python-magic>=0.4.27
+
+# 开发工具
+setuptools>=65.0.0
+wheel>=0.38.0
+
+# Windows 特定依赖（如需要）
+# python-magic-bin>=0.4.14
+
