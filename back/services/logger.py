@@ -10,7 +10,7 @@ def setup_logger(app, log_folder='log'):
     设置应用程序日志记录器
     
     Args:
-        app: Flask 应用实例
+        app: Flask 应用实例或日志记录器名称
         log_folder: 日志文件存储目录
         
     Returns:
@@ -44,19 +44,33 @@ def setup_logger(app, log_folder='log'):
     error_file_handler.setFormatter(log_formatter)
     error_file_handler.setLevel(logging.ERROR)
     
-    # 将处理器添加到应用日志记录器
-    app.logger.addHandler(file_handler)
-    app.logger.addHandler(error_file_handler)
-    
-    # 设置日志级别
-    app.logger.setLevel(logging.INFO)
-    
-    # 在开发环境中保留控制台输出
-    if app.debug:
+    # 决定是创建新的日志记录器还是使用Flask应用的记录器
+    if isinstance(app, str):
+        # 如果提供的是名称字符串，创建新的日志记录器
+        logger = logging.getLogger(app)
+        logger.handlers = []  # 清除已有的处理器
+        logger.addHandler(file_handler)
+        logger.addHandler(error_file_handler)
+        logger.setLevel(logging.INFO)
+        
+        # 添加控制台处理器
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(log_formatter)
         console_handler.setLevel(logging.DEBUG)
-        app.logger.addHandler(console_handler)
-        app.logger.setLevel(logging.DEBUG)
+        logger.addHandler(console_handler)
+    else:
+        # 否则，假设是Flask应用
+        logger = app.logger
+        logger.addHandler(file_handler)
+        logger.addHandler(error_file_handler)
+        logger.setLevel(logging.INFO)
+        
+        # 在开发环境中保留控制台输出
+        if hasattr(app, 'debug') and app.debug:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(log_formatter)
+            console_handler.setLevel(logging.DEBUG)
+            logger.addHandler(console_handler)
+            logger.setLevel(logging.DEBUG)
     
-    return app.logger 
+    return logger 

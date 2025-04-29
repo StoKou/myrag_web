@@ -37,7 +37,7 @@ class FileChunkProcessor:
         os.makedirs(self.chunk_folder, exist_ok=True)
         
         # 初始化LlamaIndex设置
-        self.initialize_llama_index()
+        # self.initialize_llama_index()
         
     def initialize_llama_index(self):
         """初始化LlamaIndex的设置"""
@@ -255,4 +255,63 @@ class FileChunkProcessor:
             return {
                 "success": False,
                 "error": f"保存切分结果时出错: {str(e)}"
-            } 
+            }
+    
+    def get_chunked_files(self):
+        """
+        获取chunk文件夹下的所有切分文件
+        
+        Returns:
+            list: 包含切分文件信息的列表
+        """
+        chunked_files = []
+        
+        try:
+            # 检查目录是否存在
+            if not os.path.exists(self.chunk_folder):
+                print(f"目录不存在: {self.chunk_folder}")
+                return chunked_files
+            
+            # 遍历目录中的所有文件
+            for filename in os.listdir(self.chunk_folder):
+                if filename.endswith('.json'):
+                    file_path = os.path.join(self.chunk_folder, filename)
+                    
+                    try:
+                        # 读取文件以获取元数据
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            file_data = json.load(f)
+                        
+                        # 获取文件信息
+                        file_id = os.path.splitext(filename)[0]
+                        original_filename = file_data.get("文件名称", "未知")
+                        chunk_method = file_data.get("chunk_method", "未知")
+                        chunk_count = len(file_data.get("chunks", []))
+                        created_time = file_data.get("切分时间", 
+                                                  datetime.datetime.fromtimestamp(
+                                                      os.path.getctime(file_path)
+                                                  ).isoformat())
+                        
+                        # 构建文件信息对象
+                        file_info = {
+                            "id": file_id,
+                            "filename": filename,
+                            "original_filename": original_filename,
+                            "chunk_method": chunk_method,
+                            "chunk_count": chunk_count,
+                            "file_path": file_path,
+                            "created_at": created_time,
+                            "file_size_bytes": os.path.getsize(file_path)
+                        }
+                        
+                        chunked_files.append(file_info)
+                    except Exception as e:
+                        print(f"处理文件 {filename} 时出错: {e}")
+            
+            # 按创建时间排序，最新的排在前面
+            chunked_files.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            
+            return chunked_files
+        except Exception as e:
+            print(f"获取切分文件列表时出错: {e}")
+            return [] 

@@ -10,6 +10,7 @@ from flask_cors import CORS
 # 导入自定义服务模块
 from services.file_processor import FileProcessor
 from services.file_chunk import FileChunkProcessor
+from services.file_embedding import EmbeddingClass
 from services.logger import setup_logger
 
 # 配置常量
@@ -43,57 +44,19 @@ def upload_file():
         logger.warning("没有文件部分在请求中")
         return jsonify({"error": "没有文件部分"}), 400
     
+    # 获取参数
     file = request.files['file']
     file_type = request.form.get('type')
     
-    # 检查文件名是否为空
-    if file.filename == '':
-        logger.warning("没有选择文件")
-        return jsonify({"error": "没有选择文件"}), 400
+    # 委托给FileProcessor处理所有上传和处理逻辑
+    result, status_code = file_processor.handle_upload_request(
+        file=file,
+        file_type=file_type,
+        allowed_extensions=ALLOWED_EXTENSIONS,
+        logger=logger
+    )
     
-    # 检查文件类型是否指定
-    if not file_type:
-        logger.warning("没有指定文件类型")
-        return jsonify({"error": "没有指定文件类型"}), 400
-    
-    # 检查文件类型是否允许
-    if not file_processor.allowed_file(file.filename, ALLOWED_EXTENSIONS):
-        logger.warning(f"不允许的文件类型: {file.filename}")
-        return jsonify({"error": "不允许的文件类型"}), 400
-    
-    try:
-        # 保存上传的文件
-        logger.info(f"开始处理文件: {file.filename}, 类型: {file_type}")
-        file_info = file_processor.save_upload_file(file, file_type)
-        
-        # 处理文件
-        logger.info(f"文件已保存到: {file_info['upload_path']}, 开始提取内容")
-        result = file_processor.process_file(file_info)
-        
-        processed_content = result["processed_content"]
-        logger.info(f"内容提取完成，长度: {result['content_length']} 字符")
-        logger.info(f"处理结果已保存到: {file_info['load_path']}")
-        
-        # 返回结果
-        result_payload = {
-            "message": f"文件 '{file_info['filename']}' (类型: {file_type}) 上传成功并处理完毕。",
-            "data": {
-                "processed": True,
-                "timestamp": datetime.datetime.now().isoformat(),
-                "original_filename": file_info['filename'],
-                "filename": file_info['filename'],
-                "upload_path": file_info['upload_path'],
-                "processed_file_path": file_info['load_path'],
-                "content_preview": processed_content[:500] + ('... (截断)' if len(processed_content) > 500 else '')
-            }
-        }
-        
-        return jsonify(result_payload), 200
-    
-    except Exception as e:
-        # 记录完整错误日志
-        logger.error(f"处理文件 {file.filename} 时出错: {str(e)}", exc_info=True)
-        return jsonify({"error": f"处理文件失败: {str(e)}"}), 500
+    return jsonify(result), status_code
 
 @app.route('/api/files/load', methods=['GET']) 
 def get_loaded_files():
@@ -155,6 +118,102 @@ def chunk_file():
         return jsonify({
             "success": False,
             "error": f"处理文件切分请求时出错: {str(e)}"
+        }), 500
+
+@app.route('/api/embedding', methods=['POST'])
+def generate_embeddings():
+    """
+    为切分后的文档生成嵌入向量
+    """
+    try:
+        # 获取请求参数
+        data = request.json
+        if not data:
+            logger.warning("请求中没有JSON数据")
+            return jsonify({"success": False, "error": "请求中没有JSON数据"}), 400
+        
+        chunk_file_id = data.get('chunkFileId')
+        model_type = data.get('modelType', 'huggingface')  # 默认使用huggingface
+        
+        # 验证必要参数
+        if not chunk_file_id:
+            logger.warning("未提供chunk文件ID")
+            return jsonify({"success": False, "error": "未提供chunk文件ID"}), 400
+        
+        # 验证模型类型
+        if model_type not in ['huggingface', 'openai']:
+            logger.warning(f"不支持的模型类型: {model_type}")
+            return jsonify({"success": False, "error": f"不支持的模型类型: {model_type}"}), 400
+        
+        # 处理向量嵌入
+        logger.info(f"开始生成嵌入向量: chunkFileId={chunk_file_id}, modelType={model_type}")
+        embedding_processor = EmbeddingClass(model_type=model_type)
+        result = embedding_processor.process_embeddings(chunk_file_id)
+        
+        if result["success"]:
+            logger.info(f"嵌入向量生成成功: chunkFileId={chunk_file_id}")
+            return jsonify(result), 200
+        else:
+            logger.warning(f"嵌入向量生成失败: {result.get('error', '未知错误')}")
+            return jsonify(result), 400
+    
+    except Exception as e:
+        logger.error(f"处理嵌入向量请求时出错: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": f"处理嵌入向量请求时出错: {str(e)}"
+        }), 500
+
+@app.route('/api/embedding/stats', methods=['GET'])
+def get_embedding_stats():
+    """
+    获取嵌入向量的统计信息
+    """
+    try:
+        # 使用默认的huggingface模型查询统计信息
+        embedding_processor = EmbeddingClass(model_type="huggingface")
+        stats = embedding_processor.get_embedding_stats()
+        
+        if stats.get("exists"):
+            logger.info("成功获取嵌入向量统计信息")
+            return jsonify({
+                "success": True,
+                "stats": stats
+            }), 200
+        else:
+            message = stats.get("message", "未找到嵌入向量文件")
+            logger.warning(message)
+            return jsonify({
+                "success": False,
+                "message": message
+            }), 404
+    
+    except Exception as e:
+        logger.error(f"获取嵌入向量统计信息时出错: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": f"获取嵌入向量统计信息时出错: {str(e)}"
+        }), 500
+
+@app.route('/api/files/chunk', methods=['GET'])
+def get_chunk_files():
+    """
+    获取chunk文件夹下的文件列表
+    """
+    try:
+        chunked_files = file_chunk_processor.get_chunked_files()
+        logger.info(f"获取到 {len(chunked_files)} 个已切分文件")
+        
+        return jsonify({
+            "success": True,
+            "files": chunked_files,
+            "timestamp": datetime.datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"获取切分文件列表时出错: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": f"获取切分文件列表失败: {str(e)}"
         }), 500
 
 @app.route('/api/health', methods=['GET'])

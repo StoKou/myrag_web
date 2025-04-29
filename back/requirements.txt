@@ -24,6 +24,12 @@ langchain>=0.0.300
 # OpenAI API 相关依赖
 openai>=1.0.0
 
+# Embedding 相关依赖
+transformers>=4.30.0
+torch>=2.0.0
+numpy>=1.24.0
+sentence-transformers>=2.2.0
+
 # 环境变量配置
 python-dotenv>=0.20.0
 

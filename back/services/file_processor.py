@@ -121,6 +121,76 @@ class FileProcessor:
             print(f"Error processing file {upload_path}: {e}")
             raise # 重新抛出异常，让上层处理 
     
+    def handle_upload_request(self, file, file_type, allowed_extensions, logger=None):
+        """
+        完整处理上传的文件请求，包括验证、保存和内容处理
+        
+        Args:
+            file: 上传的文件对象
+            file_type: 文件类型
+            allowed_extensions: 允许的扩展名集合
+            logger: 可选的日志记录器
+            
+        Returns:
+            dict: 包含处理结果的字典，包括成功/失败状态和相关信息
+        """
+        try:
+            # 检查文件名是否为空
+            if file.filename == '':
+                if logger:
+                    logger.warning("没有选择文件")
+                return {"success": False, "error": "没有选择文件"}, 400
+            
+            # 检查文件类型是否指定
+            if not file_type:
+                if logger:
+                    logger.warning("没有指定文件类型")
+                return {"success": False, "error": "没有指定文件类型"}, 400
+            
+            # 检查文件类型是否允许
+            if not self.allowed_file(file.filename, allowed_extensions):
+                if logger:
+                    logger.warning(f"不允许的文件类型: {file.filename}")
+                return {"success": False, "error": "不允许的文件类型"}, 400
+            
+            # 保存上传的文件
+            if logger:
+                logger.info(f"开始处理文件: {file.filename}, 类型: {file_type}")
+            file_info = self.save_upload_file(file, file_type)
+            
+            # 处理文件
+            if logger:
+                logger.info(f"文件已保存到: {file_info['upload_path']}, 开始提取内容")
+            result = self.process_file(file_info)
+            
+            processed_content = result["processed_content"]
+            if logger:
+                logger.info(f"内容提取完成，长度: {result['content_length']} 字符")
+                logger.info(f"处理结果已保存到: {file_info['load_path']}")
+            
+            # 返回成功结果
+            result_payload = {
+                "success": True,
+                "message": f"文件 '{file_info['filename']}' (类型: {file_type}) 上传成功并处理完毕。",
+                "data": {
+                    "processed": True,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "original_filename": file_info['filename'],
+                    "filename": file_info['filename'],
+                    "upload_path": file_info['upload_path'],
+                    "processed_file_path": file_info['load_path'],
+                    "content_preview": processed_content[:500] + ('... (截断)' if len(processed_content) > 500 else '')
+                }
+            }
+            
+            return result_payload, 200
+        
+        except Exception as e:
+            # 记录错误日志
+            if logger:
+                logger.error(f"处理文件 {file.filename if file else 'unknown'} 时出错: {str(e)}", exc_info=True)
+            return {"success": False, "error": f"处理文件失败: {str(e)}"}, 500
+    
     def get_loaded_files(self):
         """
         获取load文件夹下的所有文件列表

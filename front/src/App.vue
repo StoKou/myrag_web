@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router'
-import { House, Document, InfoFilled, ScaleToOriginal } from '@element-plus/icons-vue'
+import { House, Document, InfoFilled, ScaleToOriginal, DataAnalysis, Connection } from '@element-plus/icons-vue'
 
 const route = useRoute()
 </script>
@@ -28,6 +28,14 @@ const route = useRoute()
         <el-menu-item index="/chunk">
           <el-icon><ScaleToOriginal /></el-icon>
           <span>文档切分</span>
+        </el-menu-item>
+        <el-menu-item index="/embedding">
+          <el-icon><Connection /></el-icon>
+          <span>向量嵌入</span>
+        </el-menu-item>
+        <el-menu-item index="/vectorstore">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>向量存储</span>
         </el-menu-item>
         <el-menu-item index="/about">
           <el-icon><InfoFilled /></el-icon>
