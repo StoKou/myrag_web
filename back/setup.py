@@ -8,6 +8,7 @@ import unittest
 import importlib
 import time
 from datetime import datetime
+import re # 添加 re 模块用于解析 requirements.txt
 
 def create_directory_structure():
     """创建必要的目录结构"""
@@ -23,19 +24,52 @@ def create_directory_structure():
         print(f"✓ 创建目录: {directory}")
 
 def check_environment():
-    """检查环境配置"""
-    try:
-        import flask
-        import unstructured
-        import flask_cors
-        import numpy  # 为了测试代码
-        print("✓ 所有必要的依赖都已安装")
-    except ImportError as e:
-        print(f"× 缺少依赖: {e}")
-        print("请运行: pip install -r requirements.txt")
+    """检查环境配置，从 requirements.txt 读取依赖"""
+    requirements_path = "requirements.txt"
+    if not os.path.exists(requirements_path):
+        print(f"× 找不到依赖文件: {requirements_path}")
+        print("请确保 requirements.txt 文件存在于脚本所在目录。")
         return False
-    
-    return True
+
+    print(f"正在从 {requirements_path} 检查依赖...")
+    missing_packages = []
+    try:
+        with open(requirements_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+
+                # 解析包名，移除版本号、注释等
+                # 使用正则表达式查找第一个版本限定符或特殊符号
+                match = re.match(r'^\s*([a-zA-Z0-9_.-]+)', line)
+                if not match:
+                    continue # 跳过无法解析的行
+
+                package_name = match.group(1)
+                # 处理一些特殊情况，例如包名包含连字符，但导入时用下划线
+                import_name = package_name.replace('-', '_')
+
+                try:
+                    importlib.import_module(import_name)
+                    # print(f"✓ 检查通过: {package_name}") # 可以取消注释以显示每个包的检查结果
+                except ImportError:
+                    missing_packages.append(package_name)
+
+    except Exception as e:
+        print(f"× 读取或解析 {requirements_path} 时出错: {e}")
+        return False
+
+    if not missing_packages:
+        print("✓ 所有必要的依赖都已安装")
+        return True
+    else:
+        print("× 检测到缺失的依赖:")
+        for pkg in missing_packages:
+            print(f"  - {pkg}")
+        print(f"\n请运行以下命令安装缺失的依赖:")
+        print(f"pip install -r {requirements_path}")
+        return False
 
 def run_tests():
     """运行服务的测试代码，并记录结果到日志文件"""
