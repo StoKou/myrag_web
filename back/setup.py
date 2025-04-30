@@ -26,6 +26,8 @@ def create_directory_structure():
 def check_environment():
     """检查环境配置，从 requirements.txt 读取依赖"""
     requirements_path = "requirements.txt"
+    print(f"脚本使用的 Python 解释器: {sys.executable}")
+    print(f"脚本的模块搜索路径 (sys.path): {sys.path}")
     if not os.path.exists(requirements_path):
         print(f"× 找不到依赖文件: {requirements_path}")
         print("请确保 requirements.txt 文件存在于脚本所在目录。")
@@ -33,6 +35,22 @@ def check_environment():
 
     print(f"正在从 {requirements_path} 检查依赖...")
     missing_packages = []
+    
+    # Mapping from package name (in requirements.txt) to import name
+    import_name_map = {
+        "Flask": "flask",           # Import 'flask', not 'Flask'
+        "Flask-Cors": "flask_cors", # Import 'flask_cors', not 'Flask_Cors'
+        "pdfminer.six": "pdfminer",
+        "python-dotenv": "dotenv",
+        "python-magic": "magic",
+        # Add other known mappings if needed
+    }
+    # Packages to potentially skip checking due to complex import structure (e.g., namespaces)
+    # Alternatively, check the top-level namespace if sufficient
+    check_base_namespace_prefixes = ("llama-index-",) # Check 'llama_index' for these
+
+    checked_namespaces = set() # To avoid checking 'llama_index' multiple times
+
     try:
         with open(requirements_path, 'r') as f:
             for line in f:
@@ -47,14 +65,47 @@ def check_environment():
                     continue # 跳过无法解析的行
 
                 package_name = match.group(1)
-                # 处理一些特殊情况，例如包名包含连字符，但导入时用下划线
-                import_name = package_name.replace('-', '_')
+                import_name_to_try = None # Reset for each package
 
-                try:
-                    importlib.import_module(import_name)
-                    # print(f"✓ 检查通过: {package_name}") # 可以取消注释以显示每个包的检查结果
-                except ImportError:
-                    missing_packages.append(package_name)
+                # Determine the correct import name
+                if package_name in import_name_map:
+                    import_name_to_try = import_name_map[package_name]
+                elif package_name.startswith(check_base_namespace_prefixes):
+                     # Check the base namespace once
+                     base_namespace = "llama_index" # Assuming this is the common base
+                     if base_namespace not in checked_namespaces:
+                         import_name_to_try = base_namespace
+                         checked_namespaces.add(base_namespace)
+                         # Store the original package name for potential error reporting
+                         original_package_name_for_namespace = package_name 
+                     else:
+                         # Already checked the base namespace, skip redundant check for this specific sub-package
+                         # print(f"ⓘ Skipping redundant namespace check for: {package_name}")
+                         continue 
+                else:
+                    # Default: replace hyphen with underscore
+                    import_name_to_try = package_name.replace('-', '_')
+
+                # Try importing if we determined an import name
+                if import_name_to_try:
+                    try:
+                        importlib.import_module(import_name_to_try)
+                        # print(f"✓ 检查通过: {package_name} (using import {import_name_to_try})") 
+                    except ImportError:
+                        # If the base namespace check failed, report the original package name
+                        if package_name.startswith(check_base_namespace_prefixes) and import_name_to_try == base_namespace:
+                             missing_packages.append(f"{original_package_name_for_namespace} (无法导入基础模块 '{base_namespace}')")
+                             # Prevent further checks for this namespace if base failed
+                             checked_namespaces.add(base_namespace) 
+                        else:
+                             missing_packages.append(f"{package_name} (无法导入模块 '{import_name_to_try}')")
+                    except Exception as import_err: # Catch other potential import errors
+                        print(f"⚠ 检查 {package_name} (尝试导入 {import_name_to_try}) 时发生错误: {import_err}")
+                        missing_packages.append(f"{package_name} (检查时出错)")
+                else:
+                    # This case should ideally not happen with the logic above, but as a safeguard:
+                    print(f"⁇ 未能确定包 '{package_name}' 的导入名称，跳过检查。")
+
 
     except Exception as e:
         print(f"× 读取或解析 {requirements_path} 时出错: {e}")
@@ -64,10 +115,12 @@ def check_environment():
         print("✓ 所有必要的依赖都已安装")
         return True
     else:
-        print("× 检测到缺失的依赖:")
-        for pkg in missing_packages:
-            print(f"  - {pkg}")
-        print(f"\n请运行以下命令安装缺失的依赖:")
+        print("× 检测到缺失的依赖或检查时出错:")
+        for pkg_info in missing_packages:
+            print(f"  - {pkg_info}")
+        print(f"\n请再次确认这些依赖是否正确安装在以下环境中:")
+        print(f"  解释器: {sys.executable}")
+        print(f"如果确认已安装，可能是脚本检查逻辑仍需调整。或者尝试重新安装:")
         print(f"pip install -r {requirements_path}")
         return False
 
