@@ -170,23 +170,41 @@ def get_embedding_stats():
     获取嵌入向量的统计信息
     """
     try:
+        # Get the embedding file ID from query parameters
+        embedding_file_id = request.args.get('embedding_file_id')
+        if not embedding_file_id:
+            logger.warning("Missing 'embedding_file_id' query parameter")
+            return jsonify({
+                "success": False,
+                "error": "Missing required query parameter: embedding_file_id"
+            }), 400
+
         # 使用默认的huggingface模型查询统计信息
-        embedding_processor = EmbeddingClass(model_type="huggingface")
-        stats = embedding_processor.get_embedding_stats()
-        
+        # Note: The model_type might not matter for just getting stats if the file exists.
+        embedding_processor = EmbeddingClass(model_type="huggingface") 
+        stats = embedding_processor.get_embedding_stats(embedding_file_id)
+
         if stats.get("exists"):
-            logger.info("成功获取嵌入向量统计信息")
+            logger.info(f"成功获取嵌入向量统计信息 for {embedding_file_id}")
             return jsonify({
                 "success": True,
                 "stats": stats
             }), 200
         else:
-            message = stats.get("message", "未找到嵌入向量文件")
-            logger.warning(message)
-            return jsonify({
-                "success": False,
-                "message": message
-            }), 404
+            message = stats.get("message", f"未找到嵌入向量文件 for {embedding_file_id}")
+            error_detail = stats.get("error")
+            if error_detail:
+                logger.error(f"Error getting embedding stats for {embedding_file_id}: {error_detail}")
+                return jsonify({
+                    "success": False,
+                    "error": f"获取统计信息时出错: {error_detail}"
+                }), 500
+            else:
+                logger.warning(message)
+                return jsonify({
+                    "success": False,
+                    "message": message
+                }), 404
     
     except Exception as e:
         logger.error(f"获取嵌入向量统计信息时出错: {str(e)}", exc_info=True)

@@ -43,6 +43,7 @@ def check_environment():
         "pdfminer.six": "pdfminer",
         "python-dotenv": "dotenv",
         "python-magic": "magic",
+        "requests": "requests",     # Add requests package mapping
         # Add other known mappings if needed
     }
     # Packages to potentially skip checking due to complex import structure (e.g., namespaces)
