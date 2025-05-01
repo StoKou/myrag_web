@@ -12,7 +12,7 @@
           本项目旨在构建一个高效、智能的本地文档问答与检索解决方案。
         </p>
         <h3>核心功能：</h3>
-        <el-timeline style="max-width: 600px; margin-left: 20px; margin-top: 20px;">
+        <el-timeline class="home-timeline">
           <el-timeline-item timestamp="文档处理" placement="top">
             <el-card>
               <h4>文档加载与解析</h4>
@@ -81,5 +81,10 @@
 .el-timeline-item h4 {
   margin-top: 0;
   margin-bottom: 10px;
+}
+
+.home-timeline {
+  margin-top: 20px;
+  margin-left: 20px;
 }
 </style> 

@@ -71,8 +71,9 @@ html, body, #app {
 <style scoped>
 .app-container {
   height: 100vh;
-  width: 100%;
+  width: 100vw;
   display: flex;
+  box-sizing: border-box;
 }
 
 .sidebar {
