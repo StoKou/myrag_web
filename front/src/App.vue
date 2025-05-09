@@ -79,7 +79,7 @@ html, body, #app {
 .sidebar {
   background-color: #545c64;
   height: 100%;
-  box-shadow: 2px 0 6px rgba(0, 21, 41, 0.35);
+  box-shadow: 2px 0 6px rgba(250, 250, 251, 0.35);
   flex-shrink: 0;
 }
 
@@ -105,5 +105,6 @@ html, body, #app {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  background-color: #fff;
 }
 </style>

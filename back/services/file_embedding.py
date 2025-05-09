@@ -45,6 +45,7 @@ class EmbeddingClass:
         self.tokenizer = None
         self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.embedding_dim = None # Will store the embedding dimension
         
         if model_type == "huggingface":
             self._init_huggingface_model()
@@ -76,7 +77,8 @@ class EmbeddingClass:
             
             self.model.to(self.device)
             self.model.eval()  # 设置为评估模式
-            logging.info(f"成功加载模型到设备: {self.device}")
+            self.embedding_dim = self.model.config.hidden_size # Store embedding dimension
+            logging.info(f"成功加载模型到设备: {self.device}, 维度: {self.embedding_dim}")
         except Exception as e:
             logging.error(f"初始化 HuggingFace 模型时出错: {e}")
             raise
@@ -89,13 +91,14 @@ class EmbeddingClass:
                 raise ValueError("未设置 OPENAI_API_KEY 环境变量")
             
             openai.api_key = api_key
+            self.embedding_dim = 1536 # For text-embedding-3-small
             # 简单测试 API 连接
             try:
                 openai.embeddings.create(
                     model="text-embedding-3-small",
                     input="测试连接"
                 )
-                logging.info("成功连接到 OpenAI API")
+                logging.info(f"成功连接到 OpenAI API, 预期维度: {self.embedding_dim}")
             except Exception as e:
                 logging.error(f"测试 OpenAI API 连接时出错: {e}")
                 raise
@@ -312,6 +315,7 @@ class EmbeddingClass:
                  "chunk_file_id": chunk_file_id, # Add original chunk file id
                  "embedding_model_type": self.model_type,
                  "embedding_model_name": model_name_used,
+                 "embedding_model_dim": self.embedding_dim, # Add embedding dimension
                  "processed_chunk_count": processed_chunk_count,
                  "total_chunk_count": len(chunks),
                  "embedding_time_seconds": round(total_time, 2),
@@ -343,46 +347,54 @@ class EmbeddingClass:
         获取指定嵌入向量文件的统计信息
         
         Args:
-            embedding_file_id: 嵌入文件 ID (通常与 chunk_file_id 相同, 可能含或不含 _embedded 后缀)
+            embedding_file_id: 嵌入文件 ID (this is expected to be the full filename.json 
+                               from the frontend, obtained from /api/vector/stats)
 
         Returns:
             Dict: 包含统计信息的字典
         """
         try:
-            # Construct filename based on the ID passed (which might already have _embedded suffix or not)
-            if embedding_file_id.endswith("_embedded"):
-                embedding_filename = f"{embedding_file_id}.json"
-            else:
-                # Assume the ID is the base chunk ID, append suffix
-                embedding_filename = f"{embedding_file_id}_embedded.json"
-                
+            # embedding_file_id is the full filename like "some_file_embedded.json"
+            # as passed from the frontend.
+            embedding_filename = embedding_file_id 
             embedding_filepath = os.path.join(self.embedding_folder, embedding_filename)
 
             if not os.path.exists(embedding_filepath):
-                # Try finding without _embedded suffix if the first attempt failed, 
-                # maybe the ID passed already contained the suffix but we incorrectly added another one.
-                alternative_filename = f"{embedding_file_id.replace('_embedded', '')}.json"
-                alternative_filepath = os.path.join(self.embedding_folder, alternative_filename)
+                logging.warning(f"Requested embedding file not found directly: {embedding_filepath}")
+                # Simple fallback: if embedding_file_id was a base ID without "_embedded.json"
+                # (e.g., "mychunkfile" instead of "mychunkfile_embedded.json")
+                # This scenario is less likely given the current frontend flow but can be a safeguard.
                 
-                # Also check if the original ID itself was the filename (without adding suffix)
-                direct_filename = f"{embedding_file_id}.json"
-                direct_filepath = os.path.join(self.embedding_folder, direct_filename)
-
-                if os.path.exists(direct_filepath):
-                     embedding_filepath = direct_filepath
-                     embedding_filename = direct_filename
-                     logging.info(f"Found embedding file using direct name: {embedding_filename}")
-                elif os.path.exists(alternative_filepath):
-                     embedding_filepath = alternative_filepath
-                     embedding_filename = alternative_filename
-                     logging.info(f"Found embedding file using alternative name: {embedding_filename}")
-                else:
-                    logging.warning(f"嵌入向量文件不存在: {embedding_filepath} or {alternative_filepath} or {direct_filepath}")
+                # Attempt to construct the expected pattern if the direct name failed.
+                # Remove .json if it exists, then add _embedded.json
+                name_part = embedding_file_id
+                if name_part.endswith(".json"): # Remove .json suffix if present
+                    name_part = name_part[:-5]
+                
+                # If it already ends with _embedded, then the direct check should have worked or file is missing.
+                # If not, try adding _embedded.json
+                if not name_part.endswith("_embedded"):
+                    fallback_filename = f"{name_part}_embedded.json"
+                    fallback_filepath = os.path.join(self.embedding_folder, fallback_filename)
+                    if os.path.exists(fallback_filepath):
+                        embedding_filename = fallback_filename
+                        embedding_filepath = fallback_filepath
+                        logging.info(f"Found embedding file using fallback construction: {embedding_filename}")
+                    else:
+                        logging.warning(f"Fallback construction also failed to find: {fallback_filepath}")
+                        return {
+                            "exists": False,
+                            "message": f"嵌入向量文件 {embedding_file_id} (或推测的 {fallback_filename}) 不存在"
+                        }
+                else: # It ended with _embedded (after stripping .json) but wasn't found directly.
                     return {
                         "exists": False,
-                        "message": f"嵌入向量文件 {embedding_filename} 或 {alternative_filename} 或 {direct_filename} 不存在"
+                        "message": f"嵌入向量文件 {embedding_file_id} (应为 {embedding_filename}) 不存在"
                     }
             
+            # If we are here, embedding_filepath is valid
+            logging.info(f"Accessing embedding file: {embedding_filepath}")
+
             with open(embedding_filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             

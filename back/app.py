@@ -11,6 +11,7 @@ from flask_cors import CORS
 from services.file_processor import FileProcessor
 from services.file_chunk import FileChunkProcessor
 from services.file_embedding import EmbeddingClass
+from services.file_vector import VectorFileProcessor
 from services.logger import setup_logger
 
 # 配置常量
@@ -33,6 +34,7 @@ logger = setup_logger(app)
 # 初始化文件处理器
 file_processor = FileProcessor(UPLOAD_FOLDER, LOAD_FOLDER)
 file_chunk_processor = FileChunkProcessor(LOAD_FOLDER, CHUNK_FOLDER)
+vector_file_processor = VectorFileProcessor()
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -232,6 +234,87 @@ def get_chunk_files():
         return jsonify({
             "success": False,
             "error": f"获取切分文件列表失败: {str(e)}"
+        }), 500
+
+@app.route('/api/vector/stats', methods=['GET'])
+def get_vector_files_stats():
+    """
+    获取 files/embedding 文件夹下所有向量文件的统计信息
+    """
+    try:
+        logger.info("请求获取所有向量文件统计信息")
+        result = vector_file_processor.get_all_vector_file_stats()
+        
+        if result["success"]:
+            logger.info(f"成功返回 {len(result['files'])} 个向量文件的统计信息")
+            return jsonify(result), 200
+        else:
+            logger.error(f"获取向量文件统计信息失败: {result.get('error', '未知错误')}")
+            # Determine status code based on error type if possible, otherwise 500
+            status_code = 404 if "not found" in result.get("error", "").lower() else 500
+            return jsonify(result), status_code
+    
+    except Exception as e:
+        logger.error(f"处理 /api/vector/stats 请求时发生意外错误: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": f"处理请求时发生意外错误: {str(e)}",
+            "files": []
+        }), 500
+
+@app.route('/api/vector/store', methods=['POST'])
+def store_vectors_to_db():
+    """
+    Stores vectors from a specified embedding file into a vector database.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            logger.warning("No JSON data provided in /api/vector/store request")
+            return jsonify({"success": False, "error": "Missing JSON payload"}), 400
+
+        embedding_file_id = data.get('embedding_file_id')
+        vector_store_type = data.get('vector_store_type')
+        collection_name = data.get('collection_name')
+        dimension = data.get('dimension') # Dimension should be sent by frontend
+
+        if not all([embedding_file_id, vector_store_type, collection_name]):
+            logger.warning(f"Missing required parameters in /api/vector/store: file_id, type, or collection_name. Received: {data}")
+            return jsonify({"success": False, "error": "Missing required parameters: embedding_file_id, vector_store_type, collection_name"}), 400
+        
+        # Dimension is critical for Milvus schema
+        if vector_store_type == "milvus" and (not isinstance(dimension, int) or dimension <= 0):
+             logger.warning(f"Invalid or missing dimension for Milvus: {dimension}")
+             return jsonify({"success": False, "error": "Valid 'dimension' (integer > 0) is required for Milvus store type."}), 400
+
+
+        logger.info(f"Request to store vectors: file='{embedding_file_id}', type='{vector_store_type}', collection='{collection_name}', dim='{dimension}'")
+
+        if vector_store_type == "milvus":
+            result = vector_file_processor.store_vectors_to_milvus_lite(
+                embedding_file_id=embedding_file_id,
+                collection_name=collection_name,
+                dimension=dimension
+            )
+        # elif vector_store_type == "chroma":
+            # result = vector_file_processor.store_vectors_to_chroma(...) # Placeholder for Chroma
+            # pass
+        else:
+            logger.warning(f"Unsupported vector_store_type: {vector_store_type}")
+            return jsonify({"success": False, "error": f"Unsupported vector_store_type: {vector_store_type}"}), 400
+
+        if result.get("success"):
+            logger.info(f"Successfully processed /api/vector/store: {result.get('message')}")
+            return jsonify(result), 200
+        else:
+            logger.error(f"Error processing /api/vector/store: {result.get('error')}")
+            return jsonify(result), 500 # Or 400 if client-side error like file not found
+
+    except Exception as e:
+        logger.error(f"Unexpected error in /api/vector/store: {str(e)}", exc_info=True)
+        return jsonify({
+            "success": False,
+            "error": f"An unexpected server error occurred: {str(e)}"
         }), 500
 
 @app.route('/api/health', methods=['GET'])
