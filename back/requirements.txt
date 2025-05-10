@@ -4,12 +4,13 @@ werkzeug>=2.0.0
 Flask-Cors>=3.0.0
 
 # 文件处理依赖
-unstructured>=0.10.0
-unstructured[pdf]>=0.10.0
-unstructured[docx]>=0.10.0
-unstructured[pptx]>=0.10.0
-unstructured[xlsx]>=0.10.0
-unstructured[md]>=0.10.0
+unstructured>=0.13.0
+unstructured[pdf]>=0.13.0
+unstructured[docx]>=0.13.0
+unstructured[pptx]>=0.13.0
+unstructured[xlsx]>=0.13.0
+unstructured[md]>=0.13.0
+onnxruntime>=1.19.0
 pdfminer.six==20221105
 
 # LlamaIndex 相关依赖
@@ -27,7 +28,7 @@ openai>=1.0.0
 # Embedding 相关依赖
 transformers>=4.30.0
 torch>=2.0.0
-numpy>=1.24.0
+numpy>=2.0.0
 sentence-transformers>=2.2.0
 
 # 网络请求相关依赖
